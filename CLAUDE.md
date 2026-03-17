@@ -75,5 +75,20 @@ Commit message examples:
 - "Cap max risk per trade at $500"
 - "Add backtest_v2 notebook with changelog"
 
+## Root Cause Analysis Findings (root_cause_analysis_v2.ipynb)
+Two improvement areas were researched against v2 trade data:
+
+**#1 Volume Confirmation**
+- Trades filtered by signal_vol_ratio = signal_bar_volume / session_average_volume
+- High-volume breakouts (ratio >= 1.0) have a meaningfully higher win rate than low-volume ones
+- Low-volume breakouts tend to reverse immediately after the signal bar
+- Recommended fix: only enter when signal bar volume >= session average
+
+**#4 Trailing Stop to Break-Even**
+- max_favorable_excursion (MFE) tracks the max points a trade moved in your favour before exiting
+- Some trades reached 60+ pts profit (1R) then reversed into a full stop-out
+- Moving the stop to break-even (entry price) once 1R is hit would convert those losses to flat
+- Recommended fix: once trade is 60 pts in profit, move SL to entry price
+
 ## GitHub
 Repository: https://github.com/kunpark04/futures
