@@ -27,7 +27,10 @@ INITIAL_EQUITY    = 50_000.0
 MULTIPLIER        = 2          # MNQ micro NQ: $2 per index point
 MAX_RISK_DOLLARS  = 500        # max dollar loss per trade at the stop
 SL_POINTS         = 60         # stop loss  60 NQ index points (~0.3% of price)
-TP_POINTS       = 120        # take profit 120 NQ index points (2:1 RR)
+TP_POINTS         = 120        # take profit 120 NQ index points (2:1 RR)
+TRAILING_STOP_BE  = False      # move SL to break-even once 1R (SL_POINTS) profit reached
+                               # Tested on 11yr dataset: BE hurts (-$30k, win rate 44.7%->38.8%)
+                               # Set True to re-test; pass trailing_stop_be= to run_backtest()
 OR_BARS         = 6          # 6 × 5-min = 30-min opening range
 EMA_PERIOD      = 20
 RSI_PERIOD      = 14
@@ -93,7 +96,7 @@ def _calc_contracts(equity: float) -> int:
 # Core backtest loop
 # ---------------------------------------------------------------------------
 
-def run_backtest(df: pd.DataFrame) -> tuple:
+def run_backtest(df: pd.DataFrame, trailing_stop_be: bool = TRAILING_STOP_BE) -> tuple:
     """
     Run the ORB + EMA-20 backtest over all days in df.
 
@@ -102,13 +105,16 @@ def run_backtest(df: pd.DataFrame) -> tuple:
     df : pd.DataFrame
         5-min OHLCV data with a timezone-aware datetime index (US/Eastern).
         Must have columns: open, high, low, close, volume.
+    trailing_stop_be : bool
+        If True, move SL to entry price (break-even) once the trade
+        reaches SL_POINTS profit (1R). Defaults to TRAILING_STOP_BE constant.
 
     Returns
     -------
     trades : pd.DataFrame
         One row per completed trade with columns:
         date, direction, entry_time, exit_time, exit_reason,
-        entry_price, exit_price, contracts, pnl, equity_after
+        entry_price, exit_price, contracts, pnl, equity_after, be_triggered
     equity_curve : pd.Series
         Equity value at the close of each calendar date.
     """
@@ -137,13 +143,14 @@ def run_backtest(df: pd.DataFrame) -> tuple:
             continue
 
         # ── Scan for entry signal (first one wins) ─────────────────────────
-        in_trade  = False
-        trade_dir = 0      # +1 long, -1 short
-        entry_px  = 0.0
-        sl_px     = 0.0
-        tp_px     = 0.0
-        contracts = 1
-        entry_time = None
+        in_trade     = False
+        trade_dir    = 0      # +1 long, -1 short
+        entry_px     = 0.0
+        sl_px        = 0.0
+        tp_px        = 0.0
+        contracts    = 1
+        entry_time   = None
+        be_triggered = False  # has SL been moved to break-even?
 
         bars = list(day_df.itertuples())
         n    = len(bars)
@@ -162,6 +169,16 @@ def run_backtest(df: pd.DataFrame) -> tuple:
                     or (bar_time.hour == FORCE_EXIT_H
                         and bar_time.minute >= FORCE_EXIT_M)
                 )
+
+                # Move SL to break-even once 1R profit is reached
+                if trailing_stop_be and not be_triggered:
+                    one_r_reached = (
+                        (trade_dir == 1  and bar.high - entry_px >= SL_POINTS) or
+                        (trade_dir == -1 and entry_px - bar.low  >= SL_POINTS)
+                    )
+                    if one_r_reached:
+                        sl_px        = entry_px
+                        be_triggered = True
 
                 hit_sl = (trade_dir == 1 and bar.low  <= sl_px) or \
                          (trade_dir == -1 and bar.high >= sl_px)
@@ -197,6 +214,7 @@ def run_backtest(df: pd.DataFrame) -> tuple:
                     "contracts":    contracts,
                     "pnl":          round(pnl, 2),
                     "equity_after": round(equity, 2),
+                    "be_triggered": be_triggered,
                 })
                 in_trade = False
                 break  # one trade per day
@@ -224,19 +242,20 @@ def run_backtest(df: pd.DataFrame) -> tuple:
                 break
             next_bar = bars[i + 1]
 
-            trade_dir  = 1 if long_signal else -1
-            entry_px   = next_bar.open
-            sl_px      = entry_px - SL_POINTS * trade_dir
-            tp_px      = entry_px + TP_POINTS * trade_dir
-            contracts  = _calc_contracts(equity)
-            entry_time = next_bar.Index
-            in_trade   = True
-            i         += 1   # skip next bar (it's now the entry bar)
+            trade_dir    = 1 if long_signal else -1
+            entry_px     = next_bar.open
+            sl_px        = entry_px - SL_POINTS * trade_dir
+            tp_px        = entry_px + TP_POINTS * trade_dir
+            contracts    = _calc_contracts(equity)
+            entry_time   = next_bar.Index
+            be_triggered = False
+            in_trade     = True
+            i           += 1   # skip next bar (it's now the entry bar)
 
     # Build outputs
     trades = pd.DataFrame(trade_log) if trade_log else pd.DataFrame(columns=[
         "date", "direction", "entry_time", "exit_time", "exit_reason",
-        "entry_price", "exit_price", "contracts", "pnl", "equity_after",
+        "entry_price", "exit_price", "contracts", "pnl", "equity_after", "be_triggered",
     ])
 
     # Equity curve: daily equity snapshots

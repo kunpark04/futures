@@ -71,12 +71,13 @@ Two improvement areas were researched against v2 trade data:
 - Finding: low-volume trades had an 88.9% win rate and $4,442 P&L — outperformed high-vol
 - Conclusion: volume filter removes the best trades. Do not implement.
 
-**#4 Trailing Stop to Break-Even — PENDING IMPLEMENTATION**
-- max_favorable_excursion (MFE) tracks the max points a trade moved in your favour
-- 2 trades reached 60+ pts profit (1R) then reversed into a full stop-out
-- Moving SL to break-even (entry price) once 1R is hit converts those losses to flat (+$960)
-- Trailing stop turns losses into break-even ($0), not wins
-- Implementation: once trade is 60 pts in profit, move SL to entry price
+**#4 Trailing Stop to Break-Even — IMPLEMENTED & TESTED (backtest_v3.ipynb)**
+- Implemented as `run_backtest(df, trailing_stop_be=True/False)` toggle
+- Default: `TRAILING_STOP_BE = False` (BE hurts on full dataset)
+- Full 11yr test (2,740 trades): BE win rate 38.8% vs baseline 44.7%, PnL $44.8k vs $74.9k (-$30k)
+- Root cause: BE triggered on 845 trades (31%); many trades oscillate to entry before hitting TP
+- RCA v2 finding (+$960) was based on only 2 trades — insufficient sample size
+- Conclusion: do NOT use trailing stop to BE with this strategy's 60pt SL / 120pt TP parameters
 
 ## After Every Backtest Iteration
 1. Update this CLAUDE.md with any new learnings, pitfalls, or parameter changes

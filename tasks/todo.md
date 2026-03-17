@@ -2,16 +2,14 @@
 
 ## Pending Implementation
 
-- [ ] **Implement trailing stop to break-even (RCA #4)**
-  - Once a trade is 60 pts in profit (1R), move SL from original stop to entry price
-  - Expected improvement: +$960 across 2 affected trades in v2 dataset
-  - Update strategy.py and create backtest_v3.ipynb with changelog
-  - After implementing: update CLAUDE.md, tasks/lessons.md, and push to GitHub
+- [x] **Implement trailing stop to break-even (RCA #4)**
+  - Implemented as `trailing_stop_be=True/False` parameter on `run_backtest()`
+  - Default set to False — full 11yr test shows BE hurts: -$30k, win rate 44.7% -> 38.8%
+  - Documented in backtest_v3.ipynb; CLAUDE.md updated with finding
 
 ## Next Session
 
-- [ ] **Run full dataset backtest** — dataset now covers Dec 2014 - Mar 2026 (~11.3 years, 222,295 bars) vs the previous 60-day yfinance window. Re-run ORB + EMA-20 + RSI-14 strategy and check performance targets (win rate >= 50%, Sharpe > 1.0)
-- [ ] **Implement trailing stop to break-even** (carry over from Pending above) before or alongside the full backtest
+- [x] **Run full dataset backtest** — 2,740 trades over 11.3 years; win rate 44.7% (below 50% target); see backtest_v3.ipynb
 - [ ] **Integrate VectorBT** — replace loop-based backtester in strategy.py with vectorized engine for speed and parameter sweeps (SL/TP/RSI combinations). Install: `pip install vectorbt`
 - [ ] **Integrate Pyfolio** — replace manual analysis.py metrics with professional tear sheets (rolling Sharpe, monthly heatmap, drawdown table). Install: `pip install pyfolio`
 - [ ] **Backtrader** — defer until live trading; needed for IB connector and StopTrail order type
