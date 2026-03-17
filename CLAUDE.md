@@ -10,12 +10,13 @@ Intraday NQ futures (E-mini Nasdaq-100) trading strategy backtester.
 - **Contract:** MNQ Micro ($2/point) | No overnight positions
 
 ## File Structure
-- `data_fetch.py`     — pulls NQ=F 5-min data via yfinance, caches to data/NQ_5m.csv
-- `strategy.py`       — ORB signal logic, indicators, position sizing, backtest engine
-- `analysis.py`       — performance metrics and chart generation (saved to output/)
-- `main.py`           — CLI entry point: python main.py [--refresh]
-- `backtest.ipynb`    — v1 notebook (original)
-- `backtest_v2.ipynb` — v2 notebook with changelog and exit breakdown
+- `data_fetch.py`              — pulls NQ=F 5-min data via yfinance, caches to data/NQ_5m.csv
+- `strategy.py`                — ORB signal logic, indicators, position sizing, backtest engine
+- `analysis.py`                — performance metrics and chart generation (saved to output/)
+- `main.py`                    — CLI entry point: python main.py [--refresh]
+- `backtest.ipynb`             — v1 notebook (original, price-% stops, no RSI)
+- `backtest_v2.ipynb`          — v2 notebook with changelog and exit breakdown
+- `root_cause_analysis_v2.ipynb` — RCA notebook: volume filter + trailing stop analysis
 
 ## Allowed Libraries
 **Third-party:** numpy, pandas, matplotlib, seaborn, yfinance
@@ -31,7 +32,7 @@ All key parameters are constants at the top of strategy.py:
 
 ## Performance Targets
 Every backtest must be checked against:
-- Win rate ≥ 50%
+- Win rate >= 50%
 - Sharpe ratio > 1.0
 
 ## Coding Rules
@@ -47,10 +48,13 @@ Every backtest must be checked against:
   the entire daily range (~150-250 pts). Always use absolute point-based stops.
 - **Resetting indicators per day causes cold-start bias.** EMA and RSI need prior
   session history to be meaningful. Always compute on the full dataset first.
-- **Windows cp1252 encoding.** Avoid Unicode characters (arrows →, box-drawing ═─)
-  in print statements — use plain ASCII (->  =  -) instead.
+- **Windows cp1252 encoding.** Avoid Unicode characters (arrows ->, box-drawing chars)
+  in print statements — use plain ASCII instead.
 - **Modifying loop variable `i` inside a for loop has no effect in Python.** Use
   a while loop or index manually if you need to skip iterations.
+- **yfinance CSV cache reload.** When reading cached CSV back, use:
+  `df.index = pd.to_datetime(df.index, utc=True).tz_convert("America/New_York")`
+  Plain `pd.to_datetime` drops timezone info and breaks session filtering.
 
 ## Position Sizing Logic
 ```
@@ -59,36 +63,30 @@ contracts         = floor(MAX_RISK_DOLLARS / risk_per_contract)  # floor(500/120
 ```
 Max loss per trade is capped at $500 regardless of equity size.
 
-## After Every Backtest Iteration
-1. Update this CLAUDE.md file with any new learnings, pitfalls, or parameter changes
-   discovered in the session.
-2. Push all changed files to GitHub with a descriptive commit message:
+## Root Cause Analysis Findings (root_cause_analysis_v2.ipynb)
+Two improvement areas were researched against v2 trade data:
 
+**#1 Volume Confirmation — DISCARDED**
+- Hypothesis: high-volume breakouts have higher win rate than low-volume ones
+- Finding: low-volume trades had an 88.9% win rate and $4,442 P&L — outperformed high-vol
+- Conclusion: volume filter removes the best trades. Do not implement.
+
+**#4 Trailing Stop to Break-Even — PENDING IMPLEMENTATION**
+- max_favorable_excursion (MFE) tracks the max points a trade moved in your favour
+- 2 trades reached 60+ pts profit (1R) then reversed into a full stop-out
+- Moving SL to break-even (entry price) once 1R is hit converts those losses to flat (+$960)
+- Trailing stop turns losses into break-even ($0), not wins
+- Implementation: once trade is 60 pts in profit, move SL to entry price
+
+## After Every Backtest Iteration
+1. Update this CLAUDE.md with any new learnings, pitfalls, or parameter changes
+2. Update tasks/lessons.md with any mistakes made during the session
+3. Push all changed files to GitHub:
 ```bash
 git add .
 git commit -m "brief description of changes"
 git push origin main
 ```
-
-Commit message examples:
-- "Fix SL/TP from price-% to absolute points; add RSI filter"
-- "Cap max risk per trade at $500"
-- "Add backtest_v2 notebook with changelog"
-
-## Root Cause Analysis Findings (root_cause_analysis_v2.ipynb)
-Two improvement areas were researched against v2 trade data:
-
-**#1 Volume Confirmation**
-- Trades filtered by signal_vol_ratio = signal_bar_volume / session_average_volume
-- High-volume breakouts (ratio >= 1.0) have a meaningfully higher win rate than low-volume ones
-- Low-volume breakouts tend to reverse immediately after the signal bar
-- Recommended fix: only enter when signal bar volume >= session average
-
-**#4 Trailing Stop to Break-Even**
-- max_favorable_excursion (MFE) tracks the max points a trade moved in your favour before exiting
-- Some trades reached 60+ pts profit (1R) then reversed into a full stop-out
-- Moving the stop to break-even (entry price) once 1R is hit would convert those losses to flat
-- Recommended fix: once trade is 60 pts in profit, move SL to entry price
 
 ## GitHub
 Repository: https://github.com/kunpark04/futures
