@@ -31,23 +31,20 @@ All key parameters are constants at the top of strategy.py:
 - `ENTRY_CUTOFF_H/M`, `FORCE_EXIT_H/M`
 
 ## Performance Targets
-Every backtest must be checked against:
+**Goal: Beat the S&P 500** — every backtest must pass:
 - Win rate >= 50%
-- Sharpe ratio > 1.0
+- Sharpe ratio > 1.0 (vs S&P 500 ~0.6, CAGR ~10-11%)
 
 ## Coding Rules
+- **Enter plan mode before writing any code** — always plan first, implement second
 - Do not hold positions overnight — all trades must exit by 15:45 ET
-- Indicators (EMA, RSI) must be computed on the full dataset, not reset per day
-- SL/TP must use absolute points (not price percentages)
+- Indicators (EMA, RSI) must be computed on the full dataset, not reset per day (cold-start bias: RSI takes 14+ bars to converge)
+- SL/TP must use absolute points, never price % (2% of NQ ~21k = 420 pts — wider than the entire daily range)
 - SL/TP checks use bar high/low; if both hit in the same bar, take the SL (conservative)
 - One trade per day — first valid signal only
 - Entry is on the open of the bar after the signal bar
 
 ## Known Pitfalls (do not repeat these mistakes)
-- **Price-% stops are too wide for intraday NQ.** 2% of price = ~420 pts, larger than
-  the entire daily range (~150-250 pts). Always use absolute point-based stops.
-- **Resetting indicators per day causes cold-start bias.** EMA and RSI need prior
-  session history to be meaningful. Always compute on the full dataset first.
 - **Windows cp1252 encoding.** Avoid Unicode characters (arrows ->, box-drawing chars)
   in print statements — use plain ASCII instead.
 - **Modifying loop variable `i` inside a for loop has no effect in Python.** Use
@@ -55,6 +52,9 @@ Every backtest must be checked against:
 - **yfinance CSV cache reload.** When reading cached CSV back, use:
   `df.index = pd.to_datetime(df.index, utc=True).tz_convert("America/New_York")`
   Plain `pd.to_datetime` drops timezone info and breaks session filtering.
+- **Relative paths in data_fetch.py break when notebooks set CWD.** Use `__file__`-relative
+  paths (`os.path.dirname(os.path.abspath(__file__))`) in any module that reads/writes
+  `data/NQ_5m.csv`, so notebooks always load from the project root regardless of their CWD.
 
 ## Position Sizing Logic
 ```

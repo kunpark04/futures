@@ -14,7 +14,8 @@ import os
 import glob
 import pandas as pd
 
-CACHE_FILE    = os.path.join("data", "NQ_5m.csv")
+_ROOT         = os.path.dirname(os.path.abspath(__file__))
+CACHE_FILE    = os.path.join(_ROOT, "data", "NQ_5m.csv")
 SESSION_START = pd.Timestamp("09:30", tz="America/New_York").time()
 SESSION_END   = pd.Timestamp("16:00", tz="America/New_York").time()
 

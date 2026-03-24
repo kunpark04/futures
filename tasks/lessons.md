@@ -25,6 +25,19 @@
 - Only 2 trades out of 46 were affected (+$960 improvement)
 - Lesson: clarify the mechanism of any improvement before reporting it
 
+## Workflow
+
+**Always enter plan mode before writing any code**
+- User explicitly requires plan mode before any coding, not just non-trivial tasks
+- Skipping plan mode (even for small changes) will be caught and flagged
+
+**Relative data paths break when Jupyter sets a different CWD**
+- `data_fetch.py` used `"data/NQ_5m.csv"` (relative to CWD)
+- Notebooks in `notebooks/original/` set CWD to that directory, so `data/NQ_5m.csv`
+  resolved to `notebooks/original/data/NQ_5m.csv` — a stale 3,700-row yfinance copy
+- Fix: use `os.path.dirname(os.path.abspath(__file__))` in any module that accesses
+  the data file, so the path is always relative to the module, not the caller's CWD
+
 ## Python / Technical
 
 **Modifying `i` inside a for loop has no effect**

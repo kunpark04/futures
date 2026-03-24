@@ -14,7 +14,8 @@ import pandas as pd
 TICKER     = "NQ=F"
 INTERVAL   = "5m"
 PERIOD     = "60d"   # yfinance max for 5-min data
-CACHE_DIR  = "data"
+_ROOT      = os.path.dirname(os.path.abspath(__file__))
+CACHE_DIR  = os.path.join(_ROOT, "data")
 CACHE_FILE = os.path.join(CACHE_DIR, "NQ_5m.csv")
 
 SESSION_START = pd.Timestamp("09:30", tz="America/New_York").time()
