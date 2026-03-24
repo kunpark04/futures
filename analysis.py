@@ -294,3 +294,71 @@ def plot_all(trades: pd.DataFrame, equity: pd.Series):
     _plot_pnl_distribution(trades)
     _plot_drawdown(equity)
     print(f"[analysis] All charts saved to ./{OUTPUT_DIR}/")
+
+
+# ---------------------------------------------------------------------------
+# Pyfolio tearsheet
+# ---------------------------------------------------------------------------
+
+def _intraday_nq_returns(nq_df: pd.DataFrame) -> pd.Series:
+    """
+    Compute daily intraday NQ returns: first bar open (9:30) to last bar close (<=15:45).
+    Used as benchmark for the pyfolio tearsheet.
+    """
+    open_df     = nq_df.between_time("09:30", "09:30")
+    close_df    = nq_df.between_time("09:30", "15:45")
+    daily_open  = open_df.groupby(open_df.index.date)["open"].first()
+    daily_close = close_df.groupby(close_df.index.date)["close"].last()
+    daily_open.index  = pd.to_datetime(daily_open.index)
+    daily_close.index = pd.to_datetime(daily_close.index)
+    rets = (daily_close - daily_open) / daily_open
+    rets.name = "NQ Intraday"
+    return rets
+
+
+def pyfolio_tearsheet(equity_curve: pd.Series, nq_df: pd.DataFrame = None):
+    """
+    Generate a Pyfolio performance tearsheet and save to output/tearsheet.pdf.
+
+    Requires: pip install pyfolio-reloaded
+
+    Parameters
+    ----------
+    equity_curve : pd.Series
+        Daily equity in dollars (business-day index), as returned by run_backtest().
+    nq_df : pd.DataFrame, optional
+        5-min NQ bar data (tz-aware, US/Eastern) used to build an intraday
+        NQ benchmark. If None, no benchmark is shown.
+    """
+    try:
+        import pyfolio as pf
+    except ImportError:
+        print("[analysis] pyfolio not installed. Run: pip install pyfolio-reloaded")
+        return
+
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    # Daily returns from equity curve
+    returns = equity_curve.pct_change().dropna()
+    returns.index = pd.to_datetime(returns.index).tz_localize("America/New_York")
+    returns.name = "NQ ORB Strategy"
+
+    # Intraday NQ benchmark
+    benchmark_rets = None
+    if nq_df is not None:
+        bm = _intraday_nq_returns(nq_df)
+        bm.index = bm.index.tz_localize("America/New_York")
+        benchmark_rets = bm.reindex(returns.index).fillna(0.0)
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    path = os.path.join(OUTPUT_DIR, "tearsheet.pdf")
+
+    print("[analysis] Generating Pyfolio tearsheet ...")
+    with PdfPages(path) as pdf:
+        pf.create_simple_tear_sheet(returns, benchmark_rets=benchmark_rets,
+                                    live_start_date=None)
+        for fig_num in plt.get_fignums():
+            pdf.savefig(plt.figure(fig_num), bbox_inches="tight")
+        plt.close("all")
+
+    print(f"[analysis] Pyfolio tearsheet saved -> {path}")

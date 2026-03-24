@@ -10,8 +10,8 @@
 ## Next Session
 
 - [x] **Run full dataset backtest** — 2,740 trades over 11.3 years; win rate 44.7% (below 50% target); see backtest_v3.ipynb
-- [ ] **Integrate VectorBT** — replace loop-based backtester in strategy.py with vectorized engine for speed and parameter sweeps (SL/TP/RSI combinations). Install: `pip install vectorbt`
-- [ ] **Integrate Pyfolio** — replace manual analysis.py metrics with professional tear sheets (rolling Sharpe, monthly heatmap, drawdown table). Install: `pip install pyfolio`
+- [x] **Integrate VectorBT** — `vectorbt_integration.ipynb` compares loop vs VectorBT on 222k bars; 27x speedup. 2 irreconcilable differences documented: -9 trades (early-close days skipped by VBT) + ~$7.5k P&L gap (same-bar SL/TP resolution). Ready for parameter sweeps.
+- [x] **Integrate Pyfolio** — added `pyfolio_tearsheet()` to analysis.py; saves output/tearsheet.pdf with alpha/beta vs intraday NQ benchmark, rolling Sharpe, drawdown table. Uses pyfolio-reloaded (pip install pyfolio-reloaded)
 - [ ] **Backtrader** — defer until live trading; needed for IB connector and StopTrail order type
 
 ## Data Pipeline (completed this session)

@@ -13,7 +13,7 @@ import os
 
 from data_fetch import fetch_data
 from strategy   import run_backtest
-from analysis   import print_summary, plot_all
+from analysis   import print_summary, plot_all, pyfolio_tearsheet
 
 
 def main():
@@ -50,6 +50,7 @@ def main():
     # ── 4. Save charts ──────────────────────────────────────────────────────
     print("[main] Generating charts ...")
     plot_all(trades, equity)
+    pyfolio_tearsheet(equity, df)
 
     # ── 5. Save trade log ───────────────────────────────────────────────────
     os.makedirs("output", exist_ok=True)
