@@ -62,14 +62,14 @@ def _rsi(series: pd.Series, period: int) -> pd.Series:
     return 100 - (100 / (1 + rs))
 
 
-def _compute_daily_or(day_df: pd.DataFrame) -> tuple:
+def _compute_daily_or(day_df: pd.DataFrame, or_bars: int = OR_BARS) -> tuple:
     """
-    Return (or_high, or_low) from the first OR_BARS bars of the session.
-    Returns (None, None) if the session has fewer bars than OR_BARS.
+    Return (or_high, or_low) from the first or_bars bars of the session.
+    Returns (None, None) if the session has fewer bars than or_bars.
     """
-    if len(day_df) < OR_BARS:
+    if len(day_df) < or_bars:
         return None, None
-    opening_bars = day_df.iloc[:OR_BARS]
+    opening_bars = day_df.iloc[:or_bars]
     return opening_bars["high"].max(), opening_bars["low"].min()
 
 
@@ -77,15 +77,15 @@ def _compute_daily_or(day_df: pd.DataFrame) -> tuple:
 # Position sizing
 # ---------------------------------------------------------------------------
 
-def _calc_contracts(equity: float) -> int:
+def _calc_contracts(equity: float, sl_pts: int = SL_POINTS) -> int:
     """
     Determine number of MNQ micro contracts to trade.
 
-    Sized so that a full stop-out (SL_POINTS) loses no more than
-    RISK_PCT of current equity.  Minimum 1 contract.
+    Sized so that a full stop-out (sl_pts) loses no more than
+    MAX_RISK_DOLLARS.  Minimum 1 contract.
     """
-    risk_dollars      = MAX_RISK_DOLLARS           # fixed $500 max loss per trade
-    risk_per_contract = SL_POINTS * MULTIPLIER     # $ lost per contract at stop
+    risk_dollars      = MAX_RISK_DOLLARS       # fixed $500 max loss per trade
+    risk_per_contract = sl_pts * MULTIPLIER    # $ lost per contract at stop
     if risk_per_contract <= 0:
         return 1
     contracts = math.floor(risk_dollars / risk_per_contract)
@@ -96,9 +96,18 @@ def _calc_contracts(equity: float) -> int:
 # Core backtest loop
 # ---------------------------------------------------------------------------
 
-def run_backtest(df: pd.DataFrame, trailing_stop_be: bool = TRAILING_STOP_BE) -> tuple:
+def run_backtest(
+    df: pd.DataFrame,
+    trailing_stop_be: bool = TRAILING_STOP_BE,
+    sl_points: int = None,
+    tp_points: int = None,
+    or_bars: int = None,
+    ema_period: int = None,
+    rsi_long_min: float = None,
+    rsi_short_max: float = None,
+) -> tuple:
     """
-    Run the ORB + EMA-20 backtest over all days in df.
+    Run the ORB + EMA backtest over all days in df.
 
     Parameters
     ----------
@@ -107,7 +116,10 @@ def run_backtest(df: pd.DataFrame, trailing_stop_be: bool = TRAILING_STOP_BE) ->
         Must have columns: open, high, low, close, volume.
     trailing_stop_be : bool
         If True, move SL to entry price (break-even) once the trade
-        reaches SL_POINTS profit (1R). Defaults to TRAILING_STOP_BE constant.
+        reaches sl_points profit (1R). Defaults to TRAILING_STOP_BE constant.
+    sl_points, tp_points, or_bars, ema_period, rsi_long_min, rsi_short_max
+        Optional overrides for the module-level strategy constants.
+        If None, the module constant is used.
 
     Returns
     -------
@@ -118,27 +130,36 @@ def run_backtest(df: pd.DataFrame, trailing_stop_be: bool = TRAILING_STOP_BE) ->
     equity_curve : pd.Series
         Equity value at the close of each calendar date.
     """
+    # Resolve parameter overrides
+    sl_pts     = sl_points    if sl_points    is not None else SL_POINTS
+    tp_pts     = tp_points    if tp_points    is not None else TP_POINTS
+    orb        = or_bars      if or_bars      is not None else OR_BARS
+    ema_p      = ema_period   if ema_period   is not None else EMA_PERIOD
+    rsi_lo_min = rsi_long_min  if rsi_long_min  is not None else RSI_LONG_MIN
+    rsi_sh_max = rsi_short_max if rsi_short_max is not None else RSI_SHORT_MAX
+
     equity    = INITIAL_EQUITY
     trade_log = []
 
     # Compute indicators on the full dataset so EMA and RSI are properly
     # warmed up across sessions (not reset to cold start each day).
     df = df.copy()
-    df["ema20"] = _ema(df["close"], EMA_PERIOD)
+    df["ema20"] = _ema(df["close"], ema_p)
     df["rsi"]   = _rsi(df["close"], RSI_PERIOD)
 
-    # Group bars by calendar date
-    dates = sorted(df.index.normalize().unique())
+    # Group bars by calendar date (pre-compute once to avoid O(T) scan per day)
+    day_groups = {d: g for d, g in df.groupby(df.index.normalize())}
+    dates = sorted(day_groups.keys())
 
     for date in dates:
-        day_df = df[df.index.normalize() == date].copy()
+        day_df = day_groups[date].copy()
 
-        # Need at least OR_BARS + 1 extra bar to trade
-        if len(day_df) <= OR_BARS:
+        # Need at least orb + 1 extra bar to trade
+        if len(day_df) <= orb:
             continue
 
         # ── Opening range ──────────────────────────────────────────────────
-        or_high, or_low = _compute_daily_or(day_df)
+        or_high, or_low = _compute_daily_or(day_df, orb)
         if or_high is None:
             continue
 
@@ -159,7 +180,7 @@ def run_backtest(df: pd.DataFrame, trailing_stop_be: bool = TRAILING_STOP_BE) ->
             bar_time = bar.Index
 
             # Skip the opening range bars for signal generation
-            if i < OR_BARS:
+            if i < orb:
                 continue
 
             # ── While in a trade, check exits ──────────────────────────────
@@ -173,8 +194,8 @@ def run_backtest(df: pd.DataFrame, trailing_stop_be: bool = TRAILING_STOP_BE) ->
                 # Move SL to break-even once 1R profit is reached
                 if trailing_stop_be and not be_triggered:
                     one_r_reached = (
-                        (trade_dir == 1  and bar.high - entry_px >= SL_POINTS) or
-                        (trade_dir == -1 and entry_px - bar.low  >= SL_POINTS)
+                        (trade_dir == 1  and bar.high - entry_px >= sl_pts) or
+                        (trade_dir == -1 and entry_px - bar.low  >= sl_pts)
                     )
                     if one_r_reached:
                         sl_px        = entry_px
@@ -231,8 +252,8 @@ def run_backtest(df: pd.DataFrame, trailing_stop_be: bool = TRAILING_STOP_BE) ->
             ema20 = bar.ema20
             rsi   = bar.rsi
 
-            long_signal  = (bar.close > or_high) and (bar.close > ema20) and (rsi > RSI_LONG_MIN)
-            short_signal = (bar.close < or_low)  and (bar.close < ema20) and (rsi < RSI_SHORT_MAX)
+            long_signal  = (bar.close > or_high) and (bar.close > ema20) and (rsi > rsi_lo_min)
+            short_signal = (bar.close < or_low)  and (bar.close < ema20) and (rsi < rsi_sh_max)
 
             if not (long_signal or short_signal):
                 continue
@@ -244,9 +265,9 @@ def run_backtest(df: pd.DataFrame, trailing_stop_be: bool = TRAILING_STOP_BE) ->
 
             trade_dir    = 1 if long_signal else -1
             entry_px     = next_bar.open
-            sl_px        = entry_px - SL_POINTS * trade_dir
-            tp_px        = entry_px + TP_POINTS * trade_dir
-            contracts    = _calc_contracts(equity)
+            sl_px        = entry_px - sl_pts * trade_dir
+            tp_px        = entry_px + tp_pts * trade_dir
+            contracts    = _calc_contracts(equity, sl_pts)
             entry_time   = next_bar.Index
             be_triggered = False
             in_trade     = True
