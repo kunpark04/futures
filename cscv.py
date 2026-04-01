@@ -97,14 +97,15 @@ def run_cscv(M: np.ndarray, S: int = 16) -> dict:
     Returns
     -------
     dict with keys:
-        pbo         : float    Probability of Backtest Overfitting
-        logits      : ndarray  logit of OOS rank per combination
-        is_sharpes  : ndarray  IS Sharpe of best IS strategy per combination
-        oos_sharpes : ndarray  OOS Sharpe of that strategy per combination
-        n_combos    : int      total combinations evaluated
-        S           : int      splits used
-        N           : int      number of strategy variants
-        T           : int      number of trading days (after trim)
+        pbo                : float    Probability of Backtest Overfitting
+        logits             : ndarray  logit of OOS rank per combination
+        is_sharpes         : ndarray  IS Sharpe of best IS strategy per combination
+        oos_sharpes        : ndarray  OOS Sharpe of that strategy per combination
+        selected_variants  : ndarray  index (0..N-1) of IS winner per combination
+        n_combos           : int      total combinations evaluated
+        S                  : int      splits used
+        N                  : int      number of strategy variants
+        T                  : int      number of trading days (after trim)
     """
     if S % 2 != 0:
         raise ValueError(f'S must be even, got S={S}')
@@ -117,9 +118,10 @@ def run_cscv(M: np.ndarray, S: int = 16) -> dict:
     chunks  = [M[i * chunk : (i + 1) * chunk] for i in range(S)]
     all_idx = list(range(S))
 
-    logits      = []
-    is_sharpes  = []
-    oos_sharpes = []
+    logits             = []
+    is_sharpes         = []
+    oos_sharpes        = []
+    selected_variants  = []
 
     for is_idx in itertools.combinations(all_idx, S // 2):
         oos_idx = [i for i in all_idx if i not in is_idx]
@@ -138,20 +140,23 @@ def run_cscv(M: np.ndarray, S: int = 16) -> dict:
         logits.append(lam)
         is_sharpes.append(is_sr[n_star])
         oos_sharpes.append(oos_sr[n_star])
+        selected_variants.append(n_star)
 
-    logits      = np.array(logits)
-    is_sharpes  = np.array(is_sharpes)
-    oos_sharpes = np.array(oos_sharpes)
+    logits            = np.array(logits)
+    is_sharpes        = np.array(is_sharpes)
+    oos_sharpes       = np.array(oos_sharpes)
+    selected_variants = np.array(selected_variants)
 
     return {
-        'pbo':         float(np.mean(logits < 0)),
-        'logits':      logits,
-        'is_sharpes':  is_sharpes,
-        'oos_sharpes': oos_sharpes,
-        'n_combos':    len(logits),
-        'S':           S,
-        'N':           N,
-        'T':           T_trim,
+        'pbo':                float(np.mean(logits < 0)),
+        'logits':             logits,
+        'is_sharpes':         is_sharpes,
+        'oos_sharpes':        oos_sharpes,
+        'selected_variants':  selected_variants,
+        'n_combos':           len(logits),
+        'S':                  S,
+        'N':                  N,
+        'T':                  T_trim,
     }
 
 

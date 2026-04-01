@@ -12,11 +12,16 @@ Intraday NQ futures (E-mini Nasdaq-100) trading strategy backtester.
 ## File Structure
 - `data_fetch.py`              — pulls NQ=F 5-min data via yfinance, caches to data/NQ_5m.csv
 - `strategy.py`                — ORB signal logic, indicators, position sizing, backtest engine
+- `cscv.py`                    — CSCV/PBO overfitting test (build_pnl_matrix, run_cscv, sharpe_cols, pbo_verdict)
 - `analysis.py`                — performance metrics and chart generation (saved to output/)
 - `main.py`                    — CLI entry point: python main.py [--refresh]
-- `backtest.ipynb`             — v1 notebook (original, price-% stops, no RSI)
-- `backtest_v2.ipynb`          — v2 notebook with changelog and exit breakdown
-- `root_cause_analysis_v2.ipynb` — RCA notebook: volume filter + trailing stop analysis
+- `research/`                  — reference papers (backtest-prob.pdf, backtest-prob.md)
+- `notebooks/original/backtest.ipynb`         — v1 notebook (original, price-% stops, no RSI)
+- `notebooks/original/backtest_v2.ipynb`      — v2 notebook with changelog and exit breakdown
+- `notebooks/original/backtest_v3.ipynb`      — v3 notebook: trailing stop BE comparison
+- `notebooks/original/backtest_v4.ipynb`      — v4 notebook: CSCV/PBO overfitting test
+- `notebooks/original/root_cause_analysis_v2.ipynb` — RCA: volume filter + trailing stop analysis
+- `notebooks/original/root_cause_analysis_v3.ipynb` — RCA v3 (in progress)
 
 ## Allowed Libraries
 **Third-party:** numpy, pandas, matplotlib, seaborn, yfinance
@@ -34,6 +39,11 @@ All key parameters are constants at the top of strategy.py:
 **Goal: Beat the S&P 500** — every backtest must pass:
 - Win rate >= 50%
 - Sharpe ratio > 1.0 (vs S&P 500 ~0.6, CAGR ~10-11%)
+
+## S&P 500 Benchmark Rule
+Every performance metric table, chart, and equity curve must include S&P 500 as a benchmark column/series.
+Reference values for Dec 2014 - Mar 2026:
+- Sharpe: ~0.6 | Max Drawdown: ~55% | Total Return: ~170% | CAGR: ~10-11%
 
 ## Coding Rules
 - **Enter plan mode before writing any code** — always plan first, implement second
@@ -62,6 +72,22 @@ risk_per_contract = SL_POINTS * MULTIPLIER      # 60 * $2 = $120
 contracts         = floor(MAX_RISK_DOLLARS / risk_per_contract)  # floor(500/120) = 4
 ```
 Max loss per trade is capped at $500 regardless of equity size.
+
+## CSCV / PBO Findings (backtest_v4.ipynb)
+Tested overfitting across 60 parameter variants (SL/TP x OR_BARS x EMA_PERIOD), S=16 splits, 12,870 combinations.
+
+**Key results:**
+- PBO = 47.7% — MODERATE overfitting risk (threshold: <5% = not overfit, >50% = high risk)
+- Prob(loss OOS) = 1.4% — the ORB edge is genuine; strategy profitable on unseen data
+- Median IS Sharpe: 1.097 -> Median OOS Sharpe: 0.717 (~35% degradation)
+- Forward Sharpe estimate: ~0.72 (realistic expectation, still beats S&P 500 ~0.60)
+- Baseline v3 params rank 48/60 — not the global optimum
+- Best variant found: SL=70, TP=140, OR=8bars, EMA=10 (Sharpe 0.990 full dataset)
+
+**Conclusion:** The strategy has genuine edge but specific parameter choices carry moderate overfitting risk.
+The v3 parameters are not the global optimum. Candidate for v5: SL=70/TP=140/OR=8/EMA=10 — rerun CSCV to confirm.
+
+**run_backtest() now accepts keyword overrides:** sl_points, tp_points, or_bars, ema_period, rsi_long_min, rsi_short_max
 
 ## Root Cause Analysis Findings (root_cause_analysis_v2.ipynb)
 Two improvement areas were researched against v2 trade data:
