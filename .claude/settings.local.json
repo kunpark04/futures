@@ -66,7 +66,12 @@
       "Bash(rmdir notebooks/original/data)",
       "Bash(rm nq*_intraday-5min_historical-data*.csv)",
       "Bash(npx skills:*)",
-      "Bash(claude plugin:*)"
+      "Bash(claude plugin:*)",
+      "mcp__ide__executeCode",
+      "Bash(jupyter --version)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)"
     ]
   }
 }
